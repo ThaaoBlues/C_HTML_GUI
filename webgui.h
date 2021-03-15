@@ -1,0 +1,198 @@
+#include <iostream>
+#include <string>
+#if defined (WIN32)
+    #include <winsock2.h>
+    typedef int socklen_t;
+#elif defined (linux)
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #define INVALID_SOCKET -1
+    #define SOCKET_ERROR -1
+    #define closesocket(s) close(s)
+    typedef int SOCKET;
+    typedef struct sockaddr_in SOCKADDR_IN;
+    typedef struct sockaddr SOCKADDR;
+#endif
+ 
+#include <stdio.h>
+#include <stdlib.h>
+#include <map>
+#include <fstream>
+#include <streambuf>
+#include <sstream>
+#include <cstring>
+
+
+#define PORT 23456
+#define HTTP_OK_RESPONSE "HTTP/1.1 200 OK\nServer: Blue-Webserv v1\nContent-Type: text/html\n\n"
+#define HTTP_NOT_FOUND_RESPONSE "HTTP/1.1 404 NOT FOUND\nServer: Blue-Webserv v1\nContent-Type: text/html\n\n"
+#define TEST_RESPONSE "<html><body><h1>Hello, World!</h1></body></html>\r\n\r\n"
+#define HTML_NOT_FOUND_PAGE "<html><body><h1>There is nothing to see here , Sorry !</h1></body></html>\r\n\r\n"
+
+using namespace std;
+ 
+
+
+std::string readfile(std::string templates_path,std::string filename){
+
+    std::string line;
+    std::string ctt;
+    ifstream myfile (templates_path+filename);
+    if (myfile.is_open())
+    {
+        while ( getline (myfile,line) )
+        {
+            ctt = ctt + line;
+        }
+        myfile.close();
+    }
+
+    return ctt;
+}
+
+
+int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int n_path,std::string templates_path){
+
+    char buffer[1024];
+
+    recv(csock, buffer, sizeof(buffer), 0);
+
+    std::string asked_uri(buffer,sizeof(buffer));
+
+    cout<<"==========================================\n"<<asked_uri<<endl;
+
+
+
+    //enumerating authorized uri
+
+
+    for(int i=0;i<n_path;i++){
+        
+        map<std::string, std::string>::iterator it;
+
+        for (it = templates.begin(); it != templates.end(); it++)
+        {
+            if(asked_uri.find(" "+it->first+" ") != std::string::npos){
+                std::cout<<"matching uri : "<< it->first<<endl;
+                std::cout<<"reading template file : "<<it->second<<endl;
+
+
+                std::string file_ctt = readfile(templates_path,it->second);
+                const char* response = file_ctt.c_str();
+                
+                //send OK response
+                send(csock,HTTP_OK_RESPONSE, sizeof(HTTP_OK_RESPONSE),0);
+
+
+
+                //send response content
+                send(csock, response, strlen(response), 0);
+                cout<<"sent response."<<endl;
+                return 0;
+
+            }
+            
+        }    
+            
+        
+    }
+
+    //went here so the response will be 404 not found
+    cout<<"sending 404 response"<<endl;
+    send(csock,HTTP_NOT_FOUND_RESPONSE, sizeof(HTTP_NOT_FOUND_RESPONSE),0);
+    send(csock,HTML_NOT_FOUND_PAGE,sizeof(HTML_NOT_FOUND_PAGE),0);
+    return 0;
+
+}
+ 
+ 
+int init_server(std::map<std::string, std::string> &templates,int n_path,std::string templates_path)
+{
+    #if defined (WIN32)
+        WSADATA WSAData;
+        int erreur = WSAStartup(MAKEWORD(2,2), &WSAData);
+    #else
+        int erreur = 0;
+    #endif
+    
+    /* Socket et contexte d'adressage du serveur */
+    SOCKADDR_IN sin;
+    SOCKET sock;
+    socklen_t recsize = sizeof(sin);
+    
+    /* Socket et contexte d'adressage du client */
+    SOCKADDR_IN csin;
+    SOCKET csock;
+    socklen_t crecsize = sizeof(csin);
+    
+    int sock_err;
+    
+    
+    if(!erreur)
+    {
+        /* Création d'une socket */
+        sock = socket(AF_INET, SOCK_STREAM, 0);
+        
+        /* Si la socket est valide */
+        if(sock != INVALID_SOCKET)
+        {
+            printf("La socket %d est maintenant ouverte en mode TCP/IP\n", sock);
+            
+            /* Configuration */
+            sin.sin_addr.s_addr = htonl(INADDR_ANY);  /* Adresse IP automatique */
+            sin.sin_family = AF_INET;                 /* Protocole familial (IP) */
+            sin.sin_port = htons(PORT);               /* Listage du port */
+            sock_err = bind(sock, (SOCKADDR*)&sin, recsize);
+            
+            /* Si la socket fonctionne */
+            if(sock_err != SOCKET_ERROR)
+            {
+                /* Démarrage du listage (mode server) */
+                sock_err = listen(sock, 5);
+                cout<<"Listening on port : "<<PORT<<endl;
+                
+
+                /* accepte à l'infini*/
+                while(true){
+                    /* Si la socket fonctionne */
+                    if(sock_err != SOCKET_ERROR)
+                    {
+                        /* Attente pendant laquelle le client se connecte */
+                        csock = accept(sock, (SOCKADDR*)&csin, &crecsize);
+
+                        //handling client request
+                        handle_client(csock,templates,n_path,templates_path);
+
+                        cout<<"closing client socket\n=========================================="<<endl;
+                        closesocket(csock);
+                    }
+                    else
+                        perror("listen");
+
+                }
+                
+            }
+            else
+                perror("bind");
+            
+            /* Fermeture de la socket client et de la socket serveur */
+            printf("Fermeture de la socket client\n");
+            closesocket(csock);
+            printf("Fermeture de la socket serveur\n");
+            closesocket(sock);
+            printf("Fermeture du serveur terminée\n");
+        }
+        else
+            perror("socket");
+        
+        #if defined (WIN32)
+            WSACleanup();
+        #endif
+    }
+    
+    return EXIT_SUCCESS;
+}
+
