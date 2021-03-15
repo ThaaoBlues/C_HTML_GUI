@@ -30,8 +30,11 @@ int main(void){
     */
     std::string templates_path = "";
     
+    //choose a port for your web server
+    int port=23456;
     
-    init_server(templates,n_path,templates_path);
+    
+    init_server(templates,n_path,templates_path,port);
     return 0;
 }
 
