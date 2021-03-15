@@ -38,4 +38,4 @@ int main(void){
 
 ```
 
-###If you are compiling under windows, please add "-lwsock32" to your g++ command to avoid errors.
+### If you are compiling under windows, please add "-lwsock32" to your g++ command to avoid errors.
