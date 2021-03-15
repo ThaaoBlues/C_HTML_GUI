@@ -19,6 +19,9 @@ int main(void){
         { "/", "test.html" },
         { "/process", "process.html" },
     };
+    
+    //number of authorized URL
+    int n_path = 2;
 
 
     /*Path to your templates, 
@@ -26,8 +29,9 @@ int main(void){
     please put a "/" at the end if you specify a path
     */
     std::string templates_path = "";
-
-    init_server(templates,2,templates_path);
+    
+    
+    init_server(templates,n_path,templates_path);
     return 0;
 }
 
