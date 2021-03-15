@@ -3,6 +3,7 @@
 #if defined (WIN32)
     #include <winsock2.h>
     typedef int socklen_t;
+    #pragma comment(lib, "ws2_32")
 #elif defined (linux)
     #include <sys/types.h>
     #include <sys/socket.h>
@@ -25,8 +26,6 @@
 #include <sstream>
 #include <cstring>
 
-
-#define PORT 23456
 #define HTTP_OK_RESPONSE "HTTP/1.1 200 OK\nServer: Blue-Webserv v1\nContent-Type: text/html\n\n"
 #define HTTP_NOT_FOUND_RESPONSE "HTTP/1.1 404 NOT FOUND\nServer: Blue-Webserv v1\nContent-Type: text/html\n\n"
 #define TEST_RESPONSE "<html><body><h1>Hello, World!</h1></body></html>\r\n\r\n"
@@ -109,7 +108,7 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
 }
  
  
-int init_server(std::map<std::string, std::string> &templates,int n_path,std::string templates_path)
+int init_server(std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int port)
 {
     #if defined (WIN32)
         WSADATA WSAData;
@@ -139,12 +138,12 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
         /* Si la socket est valide */
         if(sock != INVALID_SOCKET)
         {
-            printf("La socket %d est maintenant ouverte en mode TCP/IP\n", sock);
+            printf("The socket %d is now open\n", sock);
             
             /* Configuration */
             sin.sin_addr.s_addr = htonl(INADDR_ANY);  /* Adresse IP automatique */
             sin.sin_family = AF_INET;                 /* Protocole familial (IP) */
-            sin.sin_port = htons(PORT);               /* Listage du port */
+            sin.sin_port = htons(port);               /* Listage du port */
             sock_err = bind(sock, (SOCKADDR*)&sin, recsize);
             
             /* Si la socket fonctionne */
@@ -152,7 +151,7 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
             {
                 /* Démarrage du listage (mode server) */
                 sock_err = listen(sock, 5);
-                cout<<"Listening on port : "<<PORT<<endl;
+                cout<<"Listening on port : "<<port<<endl;
                 
 
                 /* accepte à l'infini*/
@@ -179,11 +178,11 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
                 perror("bind");
             
             /* Fermeture de la socket client et de la socket serveur */
-            printf("Fermeture de la socket client\n");
+            cout<<"Closing client socket"<<endl;
             closesocket(csock);
-            printf("Fermeture de la socket serveur\n");
+            cout<<"Closing server socket"<<endl;
             closesocket(sock);
-            printf("Fermeture du serveur terminée\n");
+
         }
         else
             perror("socket");
