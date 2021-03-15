@@ -138,7 +138,7 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
         /* Si la socket est valide */
         if(sock != INVALID_SOCKET)
         {
-            printf("The socket %d is now open\n", sock);
+            cout<<"The socket is now open"<<endl;
             
             /* Configuration */
             sin.sin_addr.s_addr = htonl(INADDR_ANY);  /* Adresse IP automatique */
@@ -168,8 +168,10 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
                         cout<<"closing client socket\n=========================================="<<endl;
                         closesocket(csock);
                     }
-                    else
+                    else{
                         perror("listen");
+                    }
+                        
 
                 }
                 
