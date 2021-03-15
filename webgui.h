@@ -53,7 +53,7 @@ std::string readfile(std::string templates_path,std::string filename){
 }
 
 
-int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int n_path,std::string templates_path){
+int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int (*p[10000])()){
 
     char buffer[1024];
 
@@ -76,6 +76,11 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
         {
             if(asked_uri.find(" "+it->first+" ") != std::string::npos){
                 std::cout<<"matching uri : "<< it->first<<endl;
+
+                std::cout<<"calling callback"<<endl;
+                
+                int result = (*p[i]) ();
+
                 std::cout<<"reading template file : "<<it->second<<endl;
 
 
@@ -90,6 +95,7 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
                 //send response content
                 send(csock, response, strlen(response), 0);
                 cout<<"sent response."<<endl;
+
                 return 0;
 
             }
@@ -108,7 +114,7 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
 }
  
  
-int init_server(std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int port)
+int init_server(std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int port,int (*p[10000])())
 {
     #if defined (WIN32)
         WSADATA WSAData;
@@ -116,7 +122,9 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
     #else
         int erreur = 0;
     #endif
+
     
+
     /* Socket et contexte d'adressage du serveur */
     SOCKADDR_IN sin;
     SOCKET sock;
@@ -163,7 +171,7 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
                         csock = accept(sock, (SOCKADDR*)&csin, &crecsize);
 
                         //handling client request
-                        handle_client(csock,templates,n_path,templates_path);
+                        handle_client(csock,templates,n_path,templates_path,p);
 
                         cout<<"closing client socket\n=========================================="<<endl;
                         closesocket(csock);
