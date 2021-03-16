@@ -5,6 +5,7 @@
 ### Example:
 
 ```C++
+#include <iostream>
 #include "webgui.h"
 
 using namespace std;
