@@ -34,6 +34,13 @@
 using namespace std;
  
 
+void pinfo(std::string info){
+
+    std::cout<<"[+] "<<info<<std::endl;
+}
+
+
+
 
 std::string readfile(std::string templates_path,std::string filename){
 
@@ -53,16 +60,24 @@ std::string readfile(std::string templates_path,std::string filename){
 }
 
 
-int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int (*p[10000])()){
+int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int (*p[10000])(std::string url)){
 
     char buffer[1024];
+    int result;
+    std::string it_url;
 
     recv(csock, buffer, sizeof(buffer), 0);
 
     std::string asked_uri(buffer,sizeof(buffer));
 
-    cout<<"==========================================\n"<<asked_uri<<endl;
+    std::cout<<"==========================================\n"<<asked_uri<<"\n\n\nPROCESSING :\n";
 
+
+    if(asked_uri.find("/favicon.ico")!= std::string::npos){
+        pinfo("SENDING WEBSITE ICON");
+
+        return 0;
+    }
 
 
     //enumerating authorized uri
@@ -74,31 +89,97 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
 
         for (it = templates.begin(); it != templates.end(); it++)
         {
-            if(asked_uri.find(" "+it->first+" ") != std::string::npos){
-                std::cout<<"matching uri : "<< it->first<<endl;
 
-                std::cout<<"calling callback"<<endl;
-                
-                int result = (*p[i]) ();
-
-                std::cout<<"reading template file : "<<it->second<<endl;
+            it_url = it->first;
 
 
-                std::string file_ctt = readfile(templates_path,it->second);
-                const char* response = file_ctt.c_str();
-                
-                //send OK response
-                send(csock,HTTP_OK_RESPONSE, sizeof(HTTP_OK_RESPONSE),0);
+            if(it_url.back() == '*'){
+
+
+                it_url.erase(it_url.end()-1);
+
+
+                if(asked_uri.find(' '+it_url) != std::string::npos){
+                    pinfo(std::string("matching url : ")+it_url);
+
+                    pinfo("calling callback");
+
+
+                    if(it->first.back() == '*'){
+                        result = (*p[i+1]) (asked_uri);
+                    }else{
+                        result = (*p[i+1]) (asked_uri);
+                    }
+
+                    //Warn of an error in callback
+                    if(result != 0){
+                        std::cout<<"[!] Error in callback function. \n URL:"<<it_url;
+                    }
+                    
+                    
+
+                    pinfo(std::string("reading template file : ")+it->second);
+
+
+                    std::string file_ctt = readfile(templates_path,it->second);
+                    const char* response = file_ctt.c_str();
+                    
+                    //send OK response
+                    send(csock,HTTP_OK_RESPONSE, sizeof(HTTP_OK_RESPONSE),0);
 
 
 
-                //send response content
-                send(csock, response, strlen(response), 0);
-                cout<<"sent response."<<endl;
+                    //send response content
+                    send(csock, response, strlen(response), 0);
+                    pinfo("sent response.");
 
-                return 0;
+                    return 0;
+
+                }
+
+            }else{
+                if(asked_uri.find(" "+it_url+" ") != std::string::npos){
+                                       pinfo(std::string("matching url : ")+it_url);
+
+                    pinfo("calling callback");
+
+
+                    if(it->first.back() == '*'){
+                        result = (*p[i]) (asked_uri);
+                    }else{
+                        result = (*p[i]) (asked_uri);
+                    }
+
+                    //Warn of an error in callback
+                    if(result != 0){
+                        std::cout<<"[!] Error in callback function. \n URL:"<<it_url;
+                    }
+                    
+                    
+
+                    pinfo(std::string("reading template file : ")+it->second);
+
+
+                    std::string file_ctt = readfile(templates_path,it->second);
+                    const char* response = file_ctt.c_str();
+                    
+                    //send OK response
+                    send(csock,HTTP_OK_RESPONSE, sizeof(HTTP_OK_RESPONSE),0);
+
+
+
+                    //send response content
+                    send(csock, response, strlen(response), 0);
+                    pinfo("sent response.");
+
+                    return 0;
+
+                }
+
 
             }
+
+            
             
         }    
             
@@ -106,7 +187,7 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
     }
 
     //went here so the response will be 404 not found
-    cout<<"sending 404 response"<<endl;
+    pinfo("sending 404 response");
     send(csock,HTTP_NOT_FOUND_RESPONSE, sizeof(HTTP_NOT_FOUND_RESPONSE),0);
     send(csock,HTML_NOT_FOUND_PAGE,sizeof(HTML_NOT_FOUND_PAGE),0);
     return 0;
@@ -114,7 +195,7 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
 }
  
  
-int init_server(std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int port,int (*p[10000])())
+int init_server(std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int port,int (*p[10000])(std::string url))
 {
     #if defined (WIN32)
         WSADATA WSAData;
