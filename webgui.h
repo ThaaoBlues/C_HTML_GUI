@@ -25,6 +25,7 @@
 #include <streambuf>
 #include <sstream>
 #include <cstring>
+#include <vector>
 
 #define HTTP_OK_RESPONSE "HTTP/1.1 200 OK\nServer: Blue-Webserv v1\nContent-Type: text/html\n\n"
 #define HTTP_NOT_FOUND_RESPONSE "HTTP/1.1 404 NOT FOUND\nServer: Blue-Webserv v1\nContent-Type: text/html\n\n"
@@ -32,14 +33,26 @@
 #define HTML_NOT_FOUND_PAGE "<html><body><h1>There is nothing to see here , Sorry !</h1></body></html>\r\n\r\n"
 
 using namespace std;
- 
 
-void pinfo(std::string info){
 
-    std::cout<<"[+] "<<info<<std::endl;
+
+std::string render_template(std::string &template_path){
+
+    std::cout<<"reading template file : "<<template_path<<endl;
+    std::string line;
+    std::string ctt;
+    ifstream myfile (template_path);
+    if (myfile.is_open())
+    {
+        while ( getline (myfile,line) )
+        {
+            ctt = ctt + line;
+        }
+        myfile.close();
+    }
+    return ctt;
+
 }
-
-
 
 
 std::string readfile(std::string templates_path,std::string filename){
@@ -60,10 +73,17 @@ std::string readfile(std::string templates_path,std::string filename){
 }
 
 
-int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int (*p[10000])(std::string url)){
+void pinfo(std::string info){
+
+    std::cout<<"[+] "<<info<<std::endl;
+}
+
+
+
+int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std::string templates_path,std::string (*p[10000])(std::string)){
 
     char buffer[1024];
-    int result;
+    std::string sResponse;
     std::string it_url;
 
     recv(csock, buffer, sizeof(buffer), 0);
@@ -82,16 +102,10 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
 
     //enumerating authorized uri
 
-
-    for(int i=0;i<n_path;i++){
-        
-        map<std::string, std::string>::iterator it;
-
-        for (it = templates.begin(); it != templates.end(); it++)
+        for (int i=0; i < auth_url.size(); i++)
         {
 
-            it_url = it->first;
-
+            it_url = auth_url[i];
 
             if(it_url.back() == '*'){
 
@@ -100,29 +114,18 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
 
 
                 if(asked_uri.find(' '+it_url) != std::string::npos){
-                    pinfo(std::string("matching url : ")+it_url);
+                    pinfo(std::string("matching url : ")+it_url+std::string("*"));
 
                     pinfo("calling callback");
 
+                    sResponse = (*p[i]) (asked_uri);
 
-                    if(it->first.back() == '*'){
-                        result = (*p[i+1]) (asked_uri);
-                    }else{
-                        result = (*p[i+1]) (asked_uri);
-                    }
 
-                    //Warn of an error in callback
-                    if(result != 0){
-                        std::cout<<"[!] Error in callback function. \n URL:"<<it_url;
-                    }
-                    
+                    pinfo("end of callback");
+                    pinfo("sending response");
                     
 
-                    pinfo(std::string("reading template file : ")+it->second);
-
-
-                    std::string file_ctt = readfile(templates_path,it->second);
-                    const char* response = file_ctt.c_str();
+                    const char* response = sResponse.c_str();
                     
                     //send OK response
                     send(csock,HTTP_OK_RESPONSE, sizeof(HTTP_OK_RESPONSE),0);
@@ -139,29 +142,18 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
 
             }else{
                 if(asked_uri.find(" "+it_url+" ") != std::string::npos){
-                                       pinfo(std::string("matching url : ")+it_url);
+
+
+                    pinfo(std::string("matching url : ")+it_url);
 
                     pinfo("calling callback");
 
 
-                    if(it->first.back() == '*'){
-                        result = (*p[i]) (asked_uri);
-                    }else{
-                        result = (*p[i]) (asked_uri);
-                    }
-
-                    //Warn of an error in callback
-                    if(result != 0){
-                        std::cout<<"[!] Error in callback function. \n URL:"<<it_url;
-                    }
-                    
-                    
-
-                    pinfo(std::string("reading template file : ")+it->second);
+                    sResponse = (*p[i]) (asked_uri);
 
 
-                    std::string file_ctt = readfile(templates_path,it->second);
-                    const char* response = file_ctt.c_str();
+
+                    const char* response = sResponse.c_str();
                     
                     //send OK response
                     send(csock,HTTP_OK_RESPONSE, sizeof(HTTP_OK_RESPONSE),0);
@@ -183,8 +175,6 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
             
         }    
             
-        
-    }
 
     //went here so the response will be 404 not found
     pinfo("sending 404 response");
@@ -195,7 +185,7 @@ int handle_client(SOCKET csock,std::map<std::string, std::string> &templates,int
 }
  
  
-int init_server(std::map<std::string, std::string> &templates,int n_path,std::string templates_path,int port,int (*p[10000])(std::string url))
+int init_server(std::vector<std::string> &auth_url,int n_path,std::string templates_path,int port,std::string (*p[10000])(std::string))
 {
     #if defined (WIN32)
         WSADATA WSAData;
@@ -252,7 +242,7 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
                         csock = accept(sock, (SOCKADDR*)&csin, &crecsize);
 
                         //handling client request
-                        handle_client(csock,templates,n_path,templates_path,p);
+                        handle_client(csock,auth_url,n_path,templates_path,p);
 
                         cout<<"closing client socket\n=========================================="<<endl;
                         closesocket(csock);
@@ -285,4 +275,3 @@ int init_server(std::map<std::string, std::string> &templates,int n_path,std::st
     
     return EXIT_SUCCESS;
 }
-
