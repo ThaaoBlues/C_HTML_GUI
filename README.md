@@ -7,48 +7,54 @@
 ### Example:
 
 ```C++
-#include <iostream>
 #include "webgui.h"
+#include <vector>
+
 
 using namespace std;
 
-int f1(std::string request){
+std::string f1(std::string request){
 
-    std::cout<<"callback of url /"<<std::endl;
-    return 0;
+    cout<<"callback of url /"<<endl;
+    std::string html_doc = "test.html";
+    std::string response = render_template(html_doc);
+    return response;
+}
+std::string f2(std::string request){
+
+    cout<<"callback of url /api"<<endl;
+
+    std::string response;
+
+    if(request.find("/api/test_api_call") != std::string::npos){
+        response = "{ 'test' : '1' }";
+    }else{
+        response = "{ 'error' : 'wrong api call' }";
+    }
+
+
+    std::cout<<response<<endl;
+
+    return response;
 }
 
 
-int f2(std::string request){
-
-    std::cout<<"callback of url /process"<<std::endl;
-
-    std::cout<<"Request made by the user : \n"<<request<<std::endl;
-
-    return 0;
-}
-
-
-int main(void){
+int main(void){ 
     
-    /*
-    list of authorized URL and their templates
-    You can add /* at the end of an url to enable
-    variables-in-url feature
-    */
-    std::map<std::string, std::string> templates = {
-        { "/", "index.html" },
-        { "/process/*", "process.html" },
-    };
     
     //number of authorized URL
-    int n_path = 2;
+    const int n_path = 2;
+    
+    //list of authorized URL
+    std::vector<std::string> auth_url = {"/","/api/*"};
+    
+   
 
 
     /*defining functions arrays for callback 
     (keeps the same order as the map of url)
     */
-    int (*p[n_path])(std::string url);
+    std::string (*p[n_path])(std::string);
 
     p[0] = f1;
     p[1] = f2;
@@ -61,10 +67,10 @@ int main(void){
     std::string templates_path = "";
     
     //choose a port for your web server
-    int port=8000;
+    int port=80;
     
     
-    init_server(templates,n_path,templates_path,port,p);
+    init_server(auth_url,n_path,templates_path,port,p);
 
     return 0;
 }
