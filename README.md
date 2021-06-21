@@ -74,7 +74,7 @@ int main(void){
     const int n_path = 2;
     
     //list of authorized URL
-    std::vector<std::string> auth_url = {"/"};
+    std::vector<std::string> auth_url = {"/","/api/*"};
     
    
 
