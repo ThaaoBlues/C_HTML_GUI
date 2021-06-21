@@ -85,6 +85,7 @@ int main(void){
     std::string (*p[n_path])(std::string headers, std::string method, std::string url, std::vector<std::string> file_data);
 
     p[0] = f1;
+    p[1] = f2;
 
 
     /*Path to your templates, 
