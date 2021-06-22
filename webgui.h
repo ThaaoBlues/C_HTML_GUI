@@ -36,12 +36,12 @@ using namespace std;
 
 
 
-std::string render_template(std::string &template_path){
+std::string render_template(std::string file_path){
 
-    std::cout<<"reading template file : "<<template_path<<endl;
+    std::cout<<"reading template file : "<<file_path<<endl;
     std::string line;
     std::string ctt;
-    ifstream myfile (template_path);
+    ifstream myfile (file_path);
     if (myfile.is_open())
     {
         while ( getline (myfile,line) )
@@ -86,7 +86,7 @@ void save_uploaded_file(std::string file_path,std::string &file_name, std::strin
     ofstream myfile (full_path,ios::binary);
     if (myfile.is_open())
     {
-        myfile << file_data;
+        myfile << file_data.c_str();
         myfile.close();
     }else{
         pinfo("unable to open : "+full_path);
@@ -223,9 +223,29 @@ std::string remove_one_request_file_headers(const std::string& str, const std::s
     return result;
 }
 
+
+std::string get_url_from_request(const std::string& str){
+
+    std::string result;
+    auto ss = std::stringstream{str};
+    std::string line = "NONE";
+
+    for(int i =0;i<2;i++){
+        std::getline(ss, line, ' ');
+        result = line;
+    }
+
+
+    return result;
+
+}
+
+
+
+
 int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std::string templates_path,std::string (*p[10000])(std::string headers, std::string method, std::string url, std::vector<std::string> file_data)){
 
-    char buffer[1024];
+    char buffer[2048];
     std::string sResponse;
     std::string it_url;
 
@@ -236,15 +256,17 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
 
     //DIFFERENT PARTS OF THE REQUEST
     //METHOD+URL
-    std::string asked_uri(split_string_by_newline(request_to_split)[0]);
+    std::string method_n_url(split_string_by_newline(request_to_split)[0]);
     //METHOD
-    std::string method = get_request_method(asked_uri);
+    std::string method = get_request_method(method_n_url);
+    //ONLY URL
+    std::string asked_uri = get_url_from_request(method_n_url);
     //HEADERS
     std::string headers(get_request_headers(request));
     
 
 
-    std::cout<<"==========================================\n"<<asked_uri<<"\n"<<headers<<"\n\n\nPROCESSING :\n";
+    std::cout<<"==========================================\n"<<method_n_url<<"\n"<<headers<<"\n\n\nPROCESSING :\n";
 
 
     if(asked_uri.find("/favicon.ico")!= std::string::npos){
@@ -286,27 +308,51 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
 
         file_data = file_data + tmp_data;
 
+        pinfo(tmp_data);
 
         std::string boundary = get_multipart_file_boundary(headers);
 
         pinfo("multipart boundary : "+ boundary);
 
-        //if the file is not sent in one request
+        //if the file is not fitting in one buffer size (2048)
         if(request.find(boundary+"--") == std::string::npos){
             
-            //wait the end of file
+
             while(true){
-                recv(csock, buffer, sizeof(buffer), 0);
+                int er = recv(csock, buffer, sizeof(buffer), 0);
                 request = string(buffer);
-                file_data = file_data + request;
+
+                if(er == -1 || er == -1 || sizeof(buffer) < 2){
+                    pinfo("socket broken");
+                    break;
+                }
+                
+                file_data += request;
+
+                /*ofstream myfile (filename,std::ios::binary | std::ios::app);
+                if (myfile.is_open())
+                {
+                    myfile << buffer;
+                    myfile.close();
+                }else{
+                    pinfo("unable to open : "+filename);
+                }*/
+
+                
 
                 //exit the loop if the boundary is hit
                 if(request.find(boundary+"--") != std::string::npos){
+                    pinfo("found boundary");
                     break;
                 }
             }
-            //remove the duplicate data and some trash resent after boundary
-            file_data = remove_trash_after_boundary(file_data,boundary+"--");
+            
+            if(request.length() >= 3){
+                //remove the duplicate data and some trash resent after boundary
+                file_data = remove_trash_after_boundary(file_data,boundary+"--");
+                
+            }
+            
         }else{
             //erase the headers after the data that are sent with the one-request file
             file_data = remove_one_request_file_headers(file_data,boundary);
@@ -332,7 +378,7 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
                 it_url.erase(it_url.end()-1);
 
 
-                if(asked_uri.find(' '+it_url) != std::string::npos){
+                if(asked_uri == it_url){
                     pinfo(std::string("matching url : ")+it_url+std::string("*"));
 
                     pinfo("calling callback");
@@ -362,7 +408,7 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
                 }
 
             }else{
-                if(asked_uri.find(" "+it_url+" ") != std::string::npos){
+                if(asked_uri == it_url){
 
 
                     pinfo(std::string("matching url : ")+it_url);
