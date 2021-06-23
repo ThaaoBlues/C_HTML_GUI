@@ -56,7 +56,6 @@ std::string render_template(std::string file_path){
 
 
 
-
 std::string readfile(std::string templates_path,std::string filename){
 
     std::string line;
@@ -81,18 +80,15 @@ void pinfo(std::string info){
 }
 
 
-void save_uploaded_file(std::string file_path,std::string &file_name, std::string &file_data){
+void save_uploaded_file(std::string file_path,std::string &file_name, vector<char> &file_data){
     std::string full_path(file_path+file_name);
-    ofstream myfile (full_path,ios::binary);
-    if (myfile.is_open())
-    {
-        myfile << file_data.c_str();
-        myfile.close();
-    }else{
-        pinfo("unable to open : "+full_path);
-    }
-    
+    //ofstream myfile (full_path,ios::binary);
+    pinfo(std::to_string(file_data.size()));
+    FILE *f = fopen(file_name.c_str(),"wb");  // "w" is for write, "b" is for binary
+    fwrite(file_data.data(), 1, file_data.size(), f);
+    fclose(f);
 }
+
 
 std::vector<std::string> split_string_by_newline(const std::string& str)
 {
@@ -241,15 +237,48 @@ std::string get_url_from_request(const std::string& str){
 }
 
 
+const int get_multipart_file_size(const std::string &str){
+
+    auto vector = std::vector<std::string>{};
+    auto ss = std::stringstream{str};
 
 
-int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std::string templates_path,std::string (*p[10000])(std::string headers, std::string method, std::string url, std::vector<std::string> file_data)){
+    std::string result;
+
+    for (std::string line; std::getline(ss, line, '\n');){
+        vector.push_back(line);
+
+    }
+
+    
+    for(int i = 0; i <= vector.size();i++){
+        if(vector[i].find("Content-Length: ") != std::string::npos){
+            
+            result = vector[i].erase(0,vector[i].find(" "));
+            result = string(result).substr(1,result.length());
+            break;
+        }
+    }
+
+    const int size = atoi(result.c_str());
+
+    return size;
+}
+
+
+int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std::string templates_path,std::string (*p[10000])(std::string headers, std::string method, std::string url,std::string file_name, vector<char> file_data)){
 
     char buffer[2048];
     std::string sResponse;
     std::string it_url;
 
-    recv(csock, buffer, sizeof(buffer), 0);
+    int er = recv(csock, buffer, sizeof(buffer), 0);
+
+
+    if(er == 0 || er == -1 || sizeof(buffer) < 2){
+        pinfo("socket broken");
+        return 0;
+    }
 
     std::string request(buffer,sizeof(buffer));
     std::string request_to_split = request;
@@ -278,15 +307,28 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
 
     //handle files upload
     std::string tmp_data;
-    std::string file_data;
+
     std::string file_info_line = "None";
     std::string filename;
+    vector<char> file_data;
     if(headers.find("multipart")!= std::string::npos){
         pinfo("MULTIPART DATA");
+
+        std::string file_data_s;
+
+
+
         recv(csock, buffer, sizeof(buffer), 0);
+
         request = string(buffer);
         request_to_split = request;
         std::string mutlipart_headers = get_request_headers(request);
+
+        //prepare the entire char array to contain the file
+        const std::size_t size = get_multipart_file_size(headers);    
+        char file[size];
+
+        pinfo("content length : "+std::to_string(size));
 
         //erase request and keep only bytes of file data
         tmp_data = request.erase(0,request.find(mutlipart_headers)+1);
@@ -301,14 +343,16 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
 
         pinfo("file name : " + filename);
 
-        
-        //erase the remaining header from file data
-        tmp_data.erase(0,tmp_data.find("\n")+1);
-        tmp_data.erase(0,tmp_data.find("\n")+1);
+        //utiliser strstr comme en bas pour supp les headers sans passer par un string
+        int pos= 0;
+        if( strstr(buffer,"\r\n\r\n") != NULL){
+            pos = strstr(buffer,"\r\n\r\n") - buffer;
+            memcpy(&file[0], buffer+pos+sizeof("\n")*2, sizeof(buffer)-(pos+sizeof("\n")*2));
+            pinfo(file);
+        }else{
+            pinfo("Multipart HTTP request not forged correctly. The file will be truncated.");
+        }
 
-        file_data = file_data + tmp_data;
-
-        pinfo(tmp_data);
 
         std::string boundary = get_multipart_file_boundary(headers);
 
@@ -316,46 +360,49 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
 
         //if the file is not fitting in one buffer size (2048)
         if(request.find(boundary+"--") == std::string::npos){
-            
 
+            int i = sizeof(buffer)-pos;
             while(true){
                 int er = recv(csock, buffer, sizeof(buffer), 0);
-                request = string(buffer);
+                i += sizeof(buffer);
 
-                if(er == -1 || er == -1 || sizeof(buffer) < 2){
+
+                if(er == 0 || er == -1 || sizeof(buffer) < 2){
                     pinfo("socket broken");
                     break;
                 }
                 
-                file_data += request;
-
-                /*ofstream myfile (filename,std::ios::binary | std::ios::app);
-                if (myfile.is_open())
-                {
-                    myfile << buffer;
-                    myfile.close();
+                if(i <= size){
+                    memcpy(&file[i-2048], buffer, sizeof(buffer));
                 }else{
-                    pinfo("unable to open : "+filename);
-                }*/
-
+                    //remove the duplicate data and some trash resent after boundary
+                    memcpy(&file[size-(i-size)], buffer, sizeof(buffer[0])*(i-size));
+                    pinfo("File size hit, getting out of the recv loop.");
+                    pinfo(file);
+                    break;
+                }
                 
-
                 //exit the loop if the boundary is hit
-                if(request.find(boundary+"--") != std::string::npos){
+                if(strstr(buffer,string(boundary+"--").c_str()) != NULL){
                     pinfo("found boundary");
                     break;
                 }
             }
+
+            //remove trash after boundary (and the boundary itself)
             
-            if(request.length() >= 3){
-                //remove the duplicate data and some trash resent after boundary
-                file_data = remove_trash_after_boundary(file_data,boundary+"--");
-                
+            if(strstr(file,string(boundary+"--").c_str()) != NULL){
+                int pos = strstr(file,string(boundary+"--").c_str()) - file;            
+                file_data.assign(file,file+(size-(size-(pos-2))));
+
+            }else{
+                file_data.assign(file,file+size);
+
             }
             
         }else{
             //erase the headers after the data that are sent with the one-request file
-            file_data = remove_one_request_file_headers(file_data,boundary);
+            file_data.assign(file,file+size);
         }
 
     }
@@ -384,8 +431,7 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
                     pinfo("calling callback");
 
 
-                    std::vector<std::string> file_data_v = {filename,file_data};
-                    sResponse = (*p[i]) (headers, method ,asked_uri, file_data_v);
+                    sResponse = (*p[i]) (headers, method ,asked_uri, filename,file_data);
 
 
                     pinfo("end of callback");
@@ -416,8 +462,7 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
                     pinfo("calling callback");
 
 
-                    std::vector<std::string> file_data_v = {filename,file_data};
-                    sResponse = (*p[i]) (headers, method ,asked_uri, file_data_v);
+                    sResponse = (*p[i]) (headers, method ,asked_uri, filename, file_data);
 
 
 
@@ -453,7 +498,7 @@ int handle_client(SOCKET csock,std::vector<std::string> &auth_url,int n_path,std
 }
  
  
-int init_server(std::vector<std::string> &auth_url,int n_path,std::string templates_path,int port,std::string (*p[10000])(std::string headers, std::string method, std::string url, std::vector<std::string> file_data))
+int init_server(std::vector<std::string> &auth_url,int n_path,std::string templates_path,int port,std::string (*p[10000])(std::string headers, std::string method, std::string url,std::string file_name, vector<char> file_data))
 {
     #if defined (WIN32)
         WSADATA WSAData;
