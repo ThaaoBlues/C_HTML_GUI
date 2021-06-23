@@ -12,14 +12,14 @@
 #include <iostream>
 using namespace std;
 
-std::string f1(std::string headers, std::string method, std::string url, std::vector<std::string> file_data){
+std::string f1(std::string headers, std::string method, std::string url,std::string file_name, vector<char> file_data){
 
     pinfo("callback of : "+url);
 
     std::string response;
 
     if(method == "GET"){
-        std::string html_doc = "test2.html";
+        std::string html_doc = "templates/index.html";
 
         response = render_template(html_doc);
 
@@ -29,13 +29,14 @@ std::string f1(std::string headers, std::string method, std::string url, std::ve
     if(method == "POST"){
         //A file is posted, get data and write it
 
-        pinfo("file name : "+file_data[0]);
-        pinfo("file content : \n"+file_data[1]);
+        pinfo("file name : "+file_name);
+        
+        pinfo("file lenght : "+ std::to_string(file_data.size()));
 
-        save_uploaded_file("",file_data[0],file_data[1]);
+        save_uploaded_file("",file_name,file_data);
 
 
-        std::string html_doc = "test2.html";
+        std::string html_doc = "templates/index.html";
 
        response = render_template(html_doc);
 
@@ -47,7 +48,7 @@ std::string f1(std::string headers, std::string method, std::string url, std::ve
 }
 
 
-std::string f2(std::string headers, std::string method, std::string url, std::vector<std::string> file_data){
+std::string f2(std::string headers, std::string method, std::string url,std::string file_name, vector<char> file_data){
     
     
     pinfo("callback of : "+url);
@@ -55,7 +56,7 @@ std::string f2(std::string headers, std::string method, std::string url, std::ve
     std::string response;
 
     if((url == "/api/test_api_call" != std::string::npos) && (method == "GET")){
-        response = "{ 'test' : '1' }";
+        response = "{'OK' : 'test successful'}";
     }else{
         response = "{ 'error' : 'wrong api call' }";
     }
@@ -63,7 +64,6 @@ std::string f2(std::string headers, std::string method, std::string url, std::ve
 
     return response;
 }
-
 
 
 
